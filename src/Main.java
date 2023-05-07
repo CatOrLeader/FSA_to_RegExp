@@ -6,16 +6,12 @@
  * Ver. 1.0.0
  *
  * Program which implements the FSA to RegExp converter.
- * Data stores and outputs in the files' 'input.txt' and 'result.txt'.
+ * Data stores and outputs in the files' 'input.txt' and 'result.txt'. Moreover, the final
+ * report output in the console too.
  */
 
-import java.io.FileWriter;
-import java.io.FileReader;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 /**
  * The Main class of the program with the general functionality.
@@ -25,7 +21,7 @@ import java.util.HashMap;
  */
 public class Main {
     /**
-     * Scanner from input file ("fsa.txt")
+     * Scanner from input file ("input.txt")
      */
     private static BufferedReader reader = null;
     /**
@@ -36,10 +32,6 @@ public class Main {
      * The static variable which provides the most general and complicated tests for FSA validation
      */
     private static final Checker CHECKER = new Checker();
-    /**
-     * The static variable which provides a finished report of the FSA validation if there are no runtime errors
-     */
-    private static final ReportFormation REPORT = new ReportFormation();
     /**
      * Array of possible states in FSA.
      */
@@ -55,52 +47,68 @@ public class Main {
     /**
      * Array of possible final states in FSA.
      */
-    private static final ArrayList<State> FINAL_STATES = new ArrayList<>();
+    private static final ArrayList<State> ACCEPTING_STATES = new ArrayList<>();
+    /**
+     * Class with the implementation of Kleene's algorithm. Works for different FSAs.
+     */
+    private static final KleeneAlgorithm algorithmImplementor = new KleeneAlgorithm();
 
     /**
      * The main method provide something like "collection" of the major methods of the entire program
      *
      * @param args canonical parameter for java entry point
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
     public static void main(String[] args) throws IOException {
         scanFiles();
 
         makeFormattedInput();
 
-        // Checking FSA for disjoint
+        // Checking FSA for disjoint and
         try {
+            if (!CHECKER.isDeterministic(STATES)) {
+                throw new FSANondeterministicException();
+            }
+
             if (CHECKER.isDisjoint(STATES, initialState)) {
                 throw new DisjointStatesException();
             }
-        } catch (DisjointStatesException e) {
+        } catch (DisjointStatesException | FSANondeterministicException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
         }
 
-        // Complete a report
-        markWarnings();
-        REPORT.markCompleteness(CHECKER.isComplete(STATES, ALPHA));
+        // Making FSA
+        FSA fsa = new FSA(STATES, ALPHA, initialState, ACCEPTING_STATES);
 
-        writer.write(REPORT.toString());
-
+        // Output final regExp in the file
+        writer.write(algorithmImplementor.getFinalRegExp(fsa) + "\n");
         reader.close();
         writer.close();
+
+        // Output final regExp in the console
+        BufferedReader output = new BufferedReader(new FileReader("result.txt"));
+        System.out.println(output.readLine());
+
+        // Complete a report
+        output.close();
     }
 
     /**
-     * Scan files input ("fsa.txt") and output ("result.txt"). Output file will be created again
+     * Scan files input ("input.txt") and output ("result.txt"). Output file will be created again
      *
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
     private static void scanFiles() throws IOException {
         try {
-            reader = new BufferedReader(new FileReader("fsa.txt"));
+            reader = new BufferedReader(new FileReader("input.txt"));
             writer = new BufferedWriter(new FileWriter("result.txt"));
         } catch (IOException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
@@ -110,17 +118,28 @@ public class Main {
     /**
      * Parse entire set of all possible states
      *
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
     private static void scanStates() throws IOException {
         try {
             String tempString = reader.readLine();
-            String[] stateNames = tempString.substring(8, tempString.length() - 1).split(",");
+
+            // If line is incorrect
+            if (tempString.length() < 7) {
+                throw new InputMalformedException();
+            }
+
+            // If keyword is incorrect
+            if (!tempString.startsWith("states=")) {
+                throw new InputMalformedException();
+            }
 
             // If nothing was appeared
             if (tempString.substring(8, tempString.length() - 1).length() == 0) {
                 throw new InputMalformedException();
             }
+
+            String[] stateNames = tempString.substring(8, tempString.length() - 1).split(",");
 
             for (String stateName : stateNames) {
                 if (!CHECKER.isStateNameCorrect(stateName)) {
@@ -132,6 +151,7 @@ public class Main {
 
         } catch (IOException | InputMalformedException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
@@ -141,17 +161,28 @@ public class Main {
     /**
      * Parse entire set of all possible transition tokens
      *
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
     private static void scanAlpha() throws IOException {
         try {
             String tempString = reader.readLine();
-            String[] transitionNames = tempString.substring(7, tempString.length() - 1).split(",");
+
+            // If line is incorrect
+            if (tempString.length() < 6) {
+                throw new InputMalformedException();
+            }
+
+            // If keyword is incorrect
+            if (!tempString.startsWith("alpha=")) {
+                throw new InputMalformedException();
+            }
 
             // If nothing was appeared
             if (tempString.substring(7, tempString.length() - 1).length() == 0) {
                 throw new InputMalformedException();
             }
+
+            String[] transitionNames = tempString.substring(7, tempString.length() - 1).split(",");
 
             for (String transitionName : transitionNames) {
                 if (!CHECKER.isTransitionNameCorrect(transitionName)) {
@@ -163,6 +194,7 @@ public class Main {
 
         } catch (IOException | InputMalformedException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
@@ -172,13 +204,24 @@ public class Main {
     /**
      * Parse initial state of FSA
      *
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
     private static void scanInitialState() throws IOException {
         try {
-            String stateName = reader.readLine();
-            stateName = stateName.substring(9, stateName.length() - 1);
-            String[] tempString = stateName.split(",");
+            String tempString = reader.readLine();
+
+            // If line is incorrect
+            if (tempString.length() < 9) {
+                throw new InputMalformedException();
+            }
+
+            String stateName = tempString.substring(9, tempString.length() - 1);
+            String[] tempString0 = stateName.split(",");
+
+            // If keyword is incorrect
+            if (!tempString.startsWith("initial=")) {
+                throw new InputMalformedException();
+            }
 
             // If nothing was appeared
             if (stateName.length() == 0) {
@@ -186,7 +229,7 @@ public class Main {
             }
 
             // If more than one initial state
-            if (tempString.length > 1) {
+            if (tempString0.length > 1) {
                 throw new InputMalformedException();
             }
 
@@ -199,6 +242,7 @@ public class Main {
 
         } catch (IOException | InputMalformedException | InitialStateNotDefinedException | IncorrectStateException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
@@ -208,16 +252,27 @@ public class Main {
     /**
      * Parse entire set of all possible final states
      *
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
-    private static void scanFinalStates() throws IOException {
+    private static void scanAcceptingStates() throws IOException {
         try {
             String tempString = reader.readLine();
-            String[] stateNames = tempString.substring(8, tempString.length() - 1).split(",");
+
+            // If line is incorrect
+            if (tempString.length() < 11) {
+                throw new InputMalformedException();
+            }
+
+            String[] stateNames = tempString.substring(11, tempString.length() - 1).split(",");
+
+            // If keyword is incorrect
+            if (!tempString.startsWith("accepting=")) {
+                throw new InputMalformedException();
+            }
 
             // If nothing was appeared
-            if (tempString.substring(8, tempString.length() - 1).length() == 0) {
-                return;
+            if (tempString.substring(11, tempString.length() - 1).length() == 0) {
+                throw new SetOfAcceptingStatesEmptyException();
             }
 
             for (String stateName : stateNames) {
@@ -228,11 +283,13 @@ public class Main {
                     throw new IncorrectStateException(stateName);
                 }
 
-                FINAL_STATES.add(tempState);
+                ACCEPTING_STATES.add(tempState);
             }
 
-        } catch (IOException | IncorrectStateException e) {
+        } catch (IOException | IncorrectStateException | SetOfAcceptingStatesEmptyException
+                | InputMalformedException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
@@ -243,12 +300,23 @@ public class Main {
      * Parse the entire set of all possible transitions. Transitions in this implementation presented as
      * links from state_1 --> (possible_states_from_state_1)
      *
-     * @throws IOException throws when input file ("fsa.txt") does not exist
+     * @throws IOException throws when input file ("input.txt") does not exist
      */
     private static void scanTransitions() throws IOException {
         try {
             String tempString = reader.readLine();
+
+            // If line is incorrect
+            if (tempString.length() < 7) {
+                throw new InputMalformedException();
+            }
+
             String[] transitions = tempString.substring(7, tempString.length() - 1).split(",");
+
+            // If keyword is incorrect
+            if (!tempString.startsWith("trans=")) {
+                throw new InputMalformedException();
+            }
 
             // If nothing was appeared
             if (tempString.substring(7, tempString.length() - 1).length() == 0) {
@@ -258,6 +326,11 @@ public class Main {
             for (String transition : transitions) {
                 // Transition split by separator = ">"
                 String[] transitionSplit = transition.split(">");
+
+                // Incorrect transition regex
+                if (transitionSplit.length != 3) {
+                    throw new InputMalformedException();
+                }
 
                 State sourceState = getState(transitionSplit[0]);
                 // If state_source from transition does not belong set of possible states
@@ -279,8 +352,10 @@ public class Main {
 
                 sourceState.addPossibleTransition(destState, trans);
             }
-        } catch (IOException | IncorrectStateException | TransitionIsNotPresentedException e) {
+        } catch (IOException | IncorrectStateException | TransitionIsNotPresentedException
+                | InputMalformedException e) {
             writer.write(e.toString());
+            System.out.println(e.toString());
             reader.close();
             writer.close();
             System.exit(0);
@@ -326,31 +401,11 @@ public class Main {
             scanStates();
             scanAlpha();
             scanInitialState();
-            scanFinalStates();
+            scanAcceptingStates();
             scanTransitions();
         } catch (IOException e) {
             System.out.println(e.getMessage());
             System.exit(0);
-        }
-    }
-
-    /**
-     * Mark appearing warnings in final report
-     */
-    private static void markWarnings() {
-        // If no final states
-        if (FINAL_STATES.size() == 0) {
-            REPORT.markWarning(1);
-        }
-
-        // If some states are not reachable from the initial state, but connected with other states somehow (!disjoint)
-        if (!CHECKER.areAllStatesReachable(STATES, initialState)) {
-            REPORT.markWarning(2);
-        }
-
-        // If there is more than one transition with the same transition token from particular state
-        if (!CHECKER.isDeterministic(STATES)) {
-            REPORT.markWarning(3);
         }
     }
 }
@@ -375,10 +430,6 @@ class Checker {
      * (e.g. 1 --> 2 now 1 <--> 2)
      */
     private static final ArrayList<State> UNDIRECTED_STATES = new ArrayList<>();
-    /**
-     * HashMap which shows how many states can be visited from the initial state
-     */
-    private static final HashMap<State, Boolean> IS_VISITED_FROM_INITIAL_STATE = new HashMap<>();
 
     /**
      * Check if the state name is correct according to task's condition
@@ -502,41 +553,6 @@ class Checker {
     }
 
     /**
-     * Check if all states are reachable from the initial state
-     *
-     * @param states       original set of all possible states
-     * @param initialState original initial state of FSA
-     * @return true - if all states are accessible from the initial state; Otherwise, false
-     */
-    public boolean areAllStatesReachable(ArrayList<State> states, State initialState) {
-        // Fill the HashMap with false - we are didn't appear in this places now
-        for (State state : states) {
-            IS_VISITED_FROM_INITIAL_STATE.put(state, false);
-        }
-
-        IS_VISITED_FROM_INITIAL_STATE.put(initialState, true);
-
-        makeMove(initialState);
-
-        return !IS_VISITED_FROM_INITIAL_STATE.containsValue(false);
-    }
-
-    /**
-     * Support step for iteration over all possible moves from the initial state
-     *
-     * @param state state from which we check every possible transition to another states
-     */
-    private void makeMove(State state) {
-        for (State tempState : state.getPossibleStatesToMove()) {
-            if (IS_VISITED_FROM_INITIAL_STATE.get(tempState)) {
-                continue;
-            }
-            IS_VISITED_FROM_INITIAL_STATE.put(tempState, true);
-            makeMove(tempState);
-        }
-    }
-
-    /**
      * Check if there is more than one transition with the same transition token for some state
      *
      * @param states original set of possible states
@@ -545,32 +561,177 @@ class Checker {
      */
     public boolean isDeterministic(ArrayList<State> states) {
         for (State state : states) {
-            int possibleTransitionsNumber = state.getTransitions().size();
-            int distinctPossibleTransitionsNumber = state.getTransitions().stream().distinct().toList().size();
-            if (possibleTransitionsNumber > distinctPossibleTransitionsNumber) {
+            ArrayList<Transition> allTransitions = new ArrayList<>();
+
+            for (ArrayList<Transition> transitionArrayList : state.getTransitions()) {
+                allTransitions.addAll(transitionArrayList);
+            }
+
+            int possibleTransitions = allTransitions.size();
+            int distinctPossibleTransitions = allTransitions.stream().distinct().toList().size();
+
+            if (distinctPossibleTransitions != possibleTransitions) {
                 return false;
             }
         }
 
         return true;
     }
+}
+
+/**
+ * Class, which represents the simple model of FSA.
+ */
+class FSA {
+    private final ArrayList<State> states;
+    private final ArrayList<Transition> alpha;
+    private State initialState;
+    private final ArrayList<State> acceptingStates;
+
+    public FSA(ArrayList<State> states, ArrayList<Transition> alpha, State initialState, ArrayList<State> acceptingStates) {
+        this.states = states;
+        this.alpha = alpha;
+        this.initialState = initialState;
+        this.acceptingStates = acceptingStates;
+    }
+
+    public ArrayList<State> getStates() {
+        return states;
+    }
+
+    public ArrayList<Transition> getAlpha() {
+        return alpha;
+    }
+
+    public State getInitialState() {
+        return initialState;
+    }
+
+    public void setInitialState(State initialState) {
+        this.initialState = initialState;
+    }
+
+    public ArrayList<State> getAcceptingStates() {
+        return acceptingStates;
+    }
+}
+
+/**
+ * Class, which represents the Kleene's Algorithm for understanding the RegExp, which
+ * accepted by given FSA.
+ */
+class KleeneAlgorithm {
+    private static final String EMPTY_SET = "{}";
+    private static final String EPSILON = "eps";
 
     /**
-     * Checking if the FSA is complete
-     *
-     * @param states      original set of possible states
-     * @param transitions original set of possible transition tokens
-     * @return true - if FSA is complete; Otherwise, false
+     * Get final accepted by given FSA RegExp without reducing terms.
+     * @param fsa for which will be found RegExp
+     * @return string, represents the possible regExp, accepted by FSA.
      */
-    public boolean isComplete(ArrayList<State> states, ArrayList<Transition> transitions) {
-        int transitionsCount = 0;
+    public String getFinalRegExp(FSA fsa) {
+        ArrayList<ArrayList<String>> steps = createEmptyStateArrays(fsa);
 
-        for (State state : states) {
-            transitionsCount += state.getTransitions().stream().distinct().toList().size();
+        initialStep(fsa, steps);
+        for (int k = 0; k < fsa.getStates().size(); k++) {
+            steps = makeStep(fsa, steps, k);
         }
 
-        // Check if the number of transitions equal to needed number of transitions of FSA to be complete
-        return transitionsCount == states.size() * transitions.size();
+        ArrayList<Integer> indexesOfAcceptingStates = new ArrayList<>();
+        for (State finalState : fsa.getAcceptingStates()) {
+            indexesOfAcceptingStates.add(fsa.getStates().indexOf(finalState));
+        }
+
+        StringBuilder stringBuilder = new StringBuilder();
+        for (Integer index : indexesOfAcceptingStates) {
+            stringBuilder.append("(");
+            stringBuilder.append(steps.get(fsa.getStates().indexOf(fsa.getInitialState())).get(index)).append(")");
+            stringBuilder.append("|");
+        }
+        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+
+        return stringBuilder.toString();
+    }
+
+    private ArrayList<ArrayList<String>> createEmptyStateArrays(FSA fsa) {
+        ArrayList<ArrayList<String>> steps = new ArrayList<>();
+        for (int i = 0; i < fsa.getStates().size(); i++) {
+            steps.add(new ArrayList<>());
+            for (int j = 0; j < fsa.getStates().size(); j++) {
+                steps.get(i).add(EMPTY_SET);
+            }
+        }
+        return steps;
+    }
+
+    private ArrayList<ArrayList<String>> makeStep(FSA fsa, ArrayList<ArrayList<String>> steps, int k) {
+        ArrayList<ArrayList<String>> newArr = new ArrayList<>();
+
+        for (int i = 0; i < fsa.getStates().size(); i++) {
+            newArr.add(new ArrayList<>());
+            for (int j = 0; j < fsa.getStates().size(); j++) {
+                newArr.get(i).add(formatRegExp(steps, i, j, k));
+            }
+        }
+
+        return newArr;
+    }
+
+    private String formatRegExp(ArrayList<ArrayList<String>> steps, int i, int j, int k) {
+        return "(" + steps.get(i).get(k) + ")" +
+                "(" + steps.get(k).get(k) + ")" +
+                "*" +
+                "(" + steps.get(k).get(j) + ")" +
+                "|" +
+                "(" + steps.get(i).get(j) + ")";
+    }
+
+
+    private void initialStep(FSA fsa, ArrayList<ArrayList<String>> steps) {
+        for (int i = 0; i < fsa.getStates().size(); i++) {
+            for (int j = 0; j < fsa.getStates().size(); j++) {
+                steps.get(i).set(j, getRegExp(fsa, i, j));
+            }
+        }
+    }
+
+    private String getRegExp(FSA fsa, int i, int j) {
+        ArrayList<String> tokens = new ArrayList<>(findTransitions(fsa, i, j));
+
+        tokens.sort(String::compareTo);
+        StringBuilder stringBuilder = new StringBuilder();
+
+        for (String token : tokens) {
+            stringBuilder.append(token).append("|");
+        }
+        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+
+        if (i == j) {
+            if (tokens.get(0).equals(EMPTY_SET)) {
+                return EPSILON;
+            }
+            stringBuilder.append("|").append(EPSILON);
+        }
+
+        return stringBuilder.toString();
+    }
+
+    private ArrayList<String> findTransitions(FSA fsa, int i, int j) {
+        State source = fsa.getStates().get(i);
+        State dest = fsa.getStates().get(j);
+
+        ArrayList<String> trans = new ArrayList<>();
+
+        if (!source.getPossibleStatesToMove().contains(dest)) {
+            trans.add(EMPTY_SET);
+            return trans;
+        }
+
+        for (Transition transition : source.getTransitions().get(source.getPossibleStatesToMove().indexOf(dest))) {
+            trans.add(transition.name());
+        }
+
+        return trans;
     }
 }
 
@@ -585,7 +746,7 @@ class State {
     /**
      * All transition tokens which can be used from this state
      */
-    private final ArrayList<Transition> transitions = new ArrayList<>();
+    private final ArrayList<ArrayList<Transition>> transitions = new ArrayList<>();
     private final String name;
 
     State(String name) {
@@ -600,7 +761,7 @@ class State {
         this.possibleStatesToMove = possibleStatesToMove;
     }
 
-    public ArrayList<Transition> getTransitions() {
+    public ArrayList<ArrayList<Transition>> getTransitions() {
         return transitions;
     }
 
@@ -609,8 +770,14 @@ class State {
     }
 
     public void addPossibleTransition(State destState, Transition transition) {
+        if (possibleStatesToMove.contains(destState)) {
+            transitions.get(possibleStatesToMove.indexOf(destState)).add(transition);
+            return;
+        }
+
         possibleStatesToMove.add(destState);
-        transitions.add(transition);
+        transitions.add(new ArrayList<>());
+        transitions.get(transitions.size() - 1).add(transition);
     }
 }
 
@@ -630,14 +797,14 @@ class IncorrectStateException extends Exception {
     }
 
     public String toString() {
-        return "Error:\nE1: A state '" + stateName + "' is not in the set of states\n";
+        return "E4: A state '" + stateName + "' is not in the set of states\n";
     }
 }
 
 class DisjointStatesException extends Exception {
     @Override
     public String toString() {
-        return "Error:\nE2: Some states are disjoint\n";
+        return "E6: Some states are disjoint\n";
     }
 }
 
@@ -649,88 +816,34 @@ class TransitionIsNotPresentedException extends Exception {
     }
 
     public String toString() {
-        return "Error:\nE3: A transition '" + transitionName + "' is not represented in the alphabet\n";
+        return "E5: A transition '" + transitionName + "' is not represented in the alphabet\n";
     }
 }
 
 class InitialStateNotDefinedException extends Exception {
     @Override
     public String toString() {
-        return "Error:\nE4: Initial state is not defined\n";
+        return "E2: Initial state is not defined\n";
     }
 }
 
 class InputMalformedException extends Exception {
     @Override
     public String toString() {
-        return "Error:\nE5: Input file is malformed\n";
+        return "E1: Input file is malformed\n";
     }
 }
 
-class WarningDoesNotExistException extends Exception {
+class SetOfAcceptingStatesEmptyException extends Exception {
     @Override
     public String toString() {
-        return "Error:\nE6: Warning with this number does not exist\n";
+        return "E3: Set of accepting states is empty\n";
     }
 }
 
-/**
- * Class which represent the final report for the FSA
- */
-class ReportFormation {
-    private static final String W1 = "W1: Accepting state is not defined";
-    private static final String W2 = "W2: Some states are not reachable from the initial state";
-    private static final String W3 = "W3: FSA is nondeterministic";
-    private static final String[] warningsMessages = {W1, W2, W3};
-    private static final boolean[] warningsAppearance = {false, false, false};
-    private static boolean completeness;
-
-    /**
-     * Mark that warning should be in the final output
-     *
-     * @param warningNumber integer number of warning
-     */
-    public void markWarning(int warningNumber) {
-        try {
-            if (!(1 <= warningNumber && warningNumber <= 3)) {
-                throw new WarningDoesNotExistException();
-            }
-
-            warningsAppearance[warningNumber - 1] = true;
-        } catch (WarningDoesNotExistException e) {
-            System.out.println(e.getMessage());
-            System.exit(0);
-        }
-    }
-
-    /**
-     * Mark if the FSA is complete
-     *
-     * @param isComplete FSA condition
-     */
-    public void markCompleteness(boolean isComplete) {
-        completeness = isComplete;
-    }
-
+class FSANondeterministicException extends Exception {
     @Override
     public String toString() {
-        StringBuilder outputString = new StringBuilder("FSA is ");
-
-        outputString.append(completeness ? "complete\n" : "incomplete\n");
-
-        boolean areWarningsAppear = false;
-        StringBuilder warningMessagesText = new StringBuilder("Warning:\n");
-        for (int i = 0; i < 3; i++) {
-            if (warningsAppearance[i]) {
-                areWarningsAppear = true;
-                warningMessagesText.append(warningsMessages[i]).append("\n");
-            }
-        }
-
-        if (areWarningsAppear) {
-            outputString.append(warningMessagesText);
-        }
-
-        return outputString.toString();
+        return "E7: FSA is nondeterministic\n";
     }
 }
